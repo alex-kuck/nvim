@@ -322,8 +322,10 @@ return {
         "<leader>tr",
         function()
           if vim.bo.filetype == "kotlin" then
-            local spec = kotlin_nearest_test_spec()
-            if not run_kotlin_with_neotest(spec) then
+            -- Let neotest resolve the nearest node from cursor/context.
+            -- Passing handcrafted IDs is fragile with nested Kotlin classes.
+            if not run_kotlin_with_neotest() then
+              local spec = kotlin_nearest_test_spec()
               if spec then
                 run_gradle({ "test", "--tests", spec }, "Spring Boot Test")
                 return
@@ -336,6 +338,20 @@ return {
           require("neotest").run.run()
         end,
         desc = "Run Nearest (Neotest)",
+      },
+      {
+        "<leader>tT",
+        function()
+          if vim.bo.filetype == "kotlin" then
+            -- neotest-kotlin does not implement directory/suite runs reliably.
+            -- Use Gradle directly for "run all" semantics in Kotlin projects.
+            run_gradle({ "test" }, "Spring Boot Test")
+            return
+          end
+          open_neotest_run_ui()
+          require("neotest").run.run(vim.uv.cwd())
+        end,
+        desc = "Run All Test Files (Neotest)",
       },
       {
         "<leader>td",
