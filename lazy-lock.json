@@ -8,6 +8,7 @@
   "flash.nvim": { "branch": "main", "commit": "fcea7ff883235d9024dc41e638f164a450c14ca2" },
   "friendly-snippets": { "branch": "main", "commit": "6cd7280adead7f586db6fccbd15d2cac7e2188b9" },
   "fzf-lua": { "branch": "main", "commit": "54669c347fe94d5be41322bd5526095f3e528713" },
+  "github-theme": { "branch": "main", "commit": "c106c9472154d6b2c74b74565616b877ae8ed31d" },
   "gitsigns.nvim": { "branch": "main", "commit": "7c4faa3540d0781a28588cafbd4dd187a28ac6e3" },
   "go-impl.nvim": { "branch": "main", "commit": "028f8367c22f823dc0708342f3ceb8406702f002" },
   "gopher.nvim": { "branch": "main", "commit": "27ba078f14dd39fcd5e8a57d7009cdd77450ebbb" },
