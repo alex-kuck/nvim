@@ -127,6 +127,22 @@ return {
     "stevearc/conform.nvim",
     opts = function(_, opts)
       -- Prettier is the single formatter source for JS/TS stacks.
+      opts.formatters = opts.formatters or {}
+      -- YAML does not allow tab indentation. Keep editorconfig support enabled,
+      -- but force a YAML-safe indentation strategy.
+      opts.formatters.prettier_yaml = {
+        inherit = false,
+        command = "prettier",
+        args = {
+          "--stdin-filepath",
+          "$FILENAME",
+          "--tab-width",
+          "2",
+          "--use-tabs",
+          "false",
+        },
+      }
+
       opts.formatters_by_ft = opts.formatters_by_ft or {}
       opts.formatters_by_ft.javascript = { "prettier" }
       opts.formatters_by_ft.javascriptreact = { "prettier" }
@@ -137,7 +153,7 @@ return {
       opts.formatters_by_ft.scss = { "prettier" }
       opts.formatters_by_ft.html = { "prettier" }
       opts.formatters_by_ft.markdown = { "prettier" }
-      opts.formatters_by_ft.yaml = { "prettier" }
+      opts.formatters_by_ft.yaml = { "prettier_yaml" }
     end,
   },
 
