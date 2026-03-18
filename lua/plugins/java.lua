@@ -46,10 +46,97 @@ local function java_or_gradle(java_cmd, gradle_args, title)
   run_gradle(gradle_args, title)
 end
 
+local function kotlin_nearest_test_spec()
+  if vim.bo.filetype ~= "kotlin" then
+    return nil
+  end
+  local file = vim.fn.expand("%:p")
+  if file == "" then
+    return nil
+  end
+
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local buf = vim.api.nvim_get_current_buf()
+  local class_name
+  local method_name
+
+  for lnum = row, 1, -1 do
+    local line = vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1] or ""
+    if not class_name then
+      class_name = line:match("^%s*class%s+([%w_]+)")
+    end
+    if not method_name then
+      method_name = line:match('^%s*fun%s+([%w_]+)%s*%(')
+      if not method_name then
+        method_name = line:match('^%s*fun%s+`([^`]+)`%s*%(')
+      end
+    end
+    if class_name and method_name then
+      break
+    end
+  end
+
+  if class_name and method_name then
+    return file .. "::" .. class_name .. "::" .. method_name
+  end
+  return file
+end
+
 return {
   {
     "mfussenegger/nvim-jdtls",
     enabled = false,
+  },
+
+  {
+    -- Kotlin tests are handled via Gradle because dedicated adapter support is still limited.
+    "nvim-neotest/neotest",
+    optional = true,
+    keys = {
+      {
+        "<leader>tt",
+        function()
+          if vim.bo.filetype == "kotlin" then
+            run_gradle({ "test" }, "Spring Boot Test")
+            return
+          end
+          require("neotest").run.run(vim.fn.expand("%:p"))
+        end,
+        desc = "Run File (Neotest)",
+      },
+      {
+        "<leader>tr",
+        function()
+          if vim.bo.filetype == "kotlin" then
+            local spec = kotlin_nearest_test_spec()
+            if spec then
+              run_gradle({ "test", "--tests", spec }, "Spring Boot Test")
+              return
+            end
+            run_gradle({ "test" }, "Spring Boot Test")
+            return
+          end
+          require("neotest").run.run()
+        end,
+        desc = "Run Nearest (Neotest)",
+      },
+      {
+        "<leader>td",
+        function()
+          if vim.bo.filetype == "kotlin" then
+            local spec = kotlin_nearest_test_spec()
+            if spec then
+              run_gradle({ "test", "--debug-jvm", "--tests", spec }, "Spring Boot Debug Tests")
+              return
+            end
+            run_gradle({ "test", "--debug-jvm" }, "Spring Boot Debug Tests")
+            return
+          end
+          require("neotest").run.run({ strategy = "dap" })
+        end,
+        desc = "Debug Nearest (Neotest)",
+      },
+    },
   },
 
   {
@@ -61,7 +148,8 @@ return {
         "java-debug-adapter",
         "java-test",
         "google-java-format",
-        "kotlin-language-server",
+        -- JetBrains kotlin-lsp tracks modern Kotlin metadata versions better.
+        "kotlin-lsp",
         "ktlint",
       })
     end,
@@ -71,8 +159,20 @@ return {
     "neovim/nvim-lspconfig",
     opts = {
       servers = {
+        -- Disable fwcd server: it often lags Kotlin metadata compatibility.
+        kotlin_language_server = false,
         -- Kotlin LSP for controllers/services when editing under /service.
-        kotlin_language_server = {
+        kotlin_lsp = {
+          -- Keep root detection Gradle-first so /ui is not indexed with /service.
+          root_markers = {
+            "settings.gradle.kts",
+            "settings.gradle",
+            "build.gradle.kts",
+            "build.gradle",
+            "gradle.properties",
+            ".git",
+          },
+          single_file_support = false,
           settings = {
             kotlin = {
               inlayHints = {
@@ -97,9 +197,8 @@ return {
 
   {
     "nvim-java/nvim-java",
-    -- Load for Kotlin too so shared Java/Spring keymaps are available
-    -- when editing Kotlin controllers in mixed projects.
-    ft = { "java", "kotlin" },
+    -- Restrict to Java buffers; loading this on Kotlin adds startup overhead.
+    ft = { "java" },
     dependencies = {
       "nvim-lua/plenary.nvim",
       "mfussenegger/nvim-dap",
@@ -190,7 +289,7 @@ return {
         -- Custom Spring task for local test profile execution.
         "<leader>jl",
         function()
-          run_gradle({ "bootTestRun" }, "Spring Boot Test Run")
+          run_gradle({ "bootTestRun", "--continuous" }, "Spring Boot Test Run")
         end,
         desc = "Spring Boot Test Run",
       },

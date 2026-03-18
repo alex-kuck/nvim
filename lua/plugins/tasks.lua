@@ -170,6 +170,99 @@ local function run_nx_task(task_name, nx_action, force_pick)
   start_with(target)
 end
 
+local function stop_all_spring_tasks()
+  -- Stops running Spring/Gradle tasks started from this workspace.
+  local overseer = require("overseer")
+  local root = service_root() or vim.fn.getcwd()
+  local stopped = 0
+
+  for _, task in ipairs(overseer.list_tasks({})) do
+    local is_running = task:is_running()
+    local cwd = task.cwd
+    local name = task.name or ""
+    if is_running and cwd == root and name:match("^Spring Boot") then
+      task:stop(true)
+      stopped = stopped + 1
+    end
+  end
+
+  if stopped == 0 then
+    vim.notify("No running Spring tasks found", vim.log.levels.INFO)
+    return
+  end
+  vim.notify("Stopped " .. stopped .. " Spring task(s)", vim.log.levels.INFO)
+end
+
+local function run_spring_task(task_name, gradle_args)
+  local overseer = require("overseer")
+  local root = service_root()
+  if not root then
+    vim.notify("No Gradle root found", vim.log.levels.WARN)
+    return
+  end
+  overseer.new_task({
+    name = task_name,
+    cmd = vim.list_extend({ gradle_cmd(root) }, gradle_args),
+    cwd = root,
+    components = { "default" },
+  }):start()
+end
+
+local function run_custom_gradle(input)
+  local overseer = require("overseer")
+  local root = service_root()
+  if not root then
+    vim.notify("No Gradle root found", vim.log.levels.WARN)
+    return
+  end
+  local args = vim.trim(input or "")
+  if args == "" then
+    return
+  end
+  overseer.new_task({
+    name = "Gradle: " .. args,
+    -- Use string command so ad-hoc flags/quoting work without extra parsing.
+    cmd = gradle_cmd(root) .. " " .. args,
+    cwd = root,
+    components = { "default" },
+  }):start()
+end
+
+local function prompt_custom_gradle()
+  vim.ui.input({ prompt = "Gradle args (e.g. detekt --auto-correct): " }, function(input)
+    run_custom_gradle(input)
+  end)
+end
+
+local function register_spring_commands()
+  -- Keep Spring entrypoints available as Ex commands in any buffer.
+  local commands = {
+    SpringBootRun = function()
+      run_spring_task("Spring Boot Run", { "bootRun", "--continuous" })
+    end,
+    SpringBootTest = function()
+      run_spring_task("Spring Boot Test", { "test" })
+    end,
+    SpringBootTestRun = function()
+      run_spring_task("Spring Boot Test Run", { "bootTestRun", "--continuous" })
+    end,
+    SpringBootStopAll = stop_all_spring_tasks,
+    SpringGradle = function(opts)
+      run_custom_gradle(opts.args)
+    end,
+  }
+
+  for name, fn in pairs(commands) do
+    if vim.fn.exists(":" .. name) == 0 then
+      local cmd_opts = { desc = name }
+      if name == "SpringGradle" then
+        cmd_opts.nargs = "*"
+      end
+      vim.api.nvim_create_user_command(name, fn, cmd_opts)
+    end
+  end
+end
+
 return {
   {
     "stevearc/overseer.nvim",
@@ -198,56 +291,62 @@ return {
       {
         "<leader>sb",
         function()
-          local overseer = require("overseer")
-          local root = service_root()
-          if not root then
-            vim.notify("No Gradle root found", vim.log.levels.WARN)
-            return
-          end
-          overseer.new_task({
-            name = "Spring Boot Run",
-            cmd = { gradle_cmd(root), "bootRun" },
-            cwd = root,
-            components = { "default" },
-          }):start()
+          run_spring_task("Spring Boot Run", { "bootRun", "--continuous" })
         end,
         desc = "Spring Boot Run",
       },
       {
         "<leader>sB",
         function()
-          local overseer = require("overseer")
-          local root = service_root()
-          if not root then
-            vim.notify("No Gradle root found", vim.log.levels.WARN)
-            return
-          end
-          overseer.new_task({
-            name = "Spring Boot Test",
-            cmd = { gradle_cmd(root), "test" },
-            cwd = root,
-            components = { "default" },
-          }):start()
+          run_spring_task("Spring Boot Test", { "test" })
         end,
         desc = "Spring Boot Test",
       },
       {
         "<leader>sl",
         function()
-          local overseer = require("overseer")
-          local root = service_root()
-          if not root then
-            vim.notify("No Gradle root found", vim.log.levels.WARN)
-            return
-          end
-          overseer.new_task({
-            name = "Spring Boot Test Run",
-            cmd = { gradle_cmd(root), "bootTestRun" },
-            cwd = root,
-            components = { "default" },
-          }):start()
+          run_spring_task("Spring Boot Test Run", { "bootTestRun", "--continuous" })
         end,
         desc = "Spring Boot Test Run",
+      },
+      {
+        "<leader>sx",
+        stop_all_spring_tasks,
+        desc = "Spring Stop All Tasks",
+      },
+      {
+        "<leader>sg",
+        prompt_custom_gradle,
+        desc = "Spring Gradle Prompt",
+      },
+      {
+        -- Kotlin fallback for Java-style Spring keymaps.
+        "<leader>jR",
+        function()
+          run_spring_task("Spring Boot Run", { "bootRun", "--continuous" })
+        end,
+        desc = "Spring Run Main",
+      },
+      {
+        "<leader>jl",
+        function()
+          run_spring_task("Spring Boot Test Run", { "bootTestRun", "--continuous" })
+        end,
+        desc = "Spring Boot Test Run",
+      },
+      {
+        "<leader>jt",
+        function()
+          run_spring_task("Spring Boot Test", { "test" })
+        end,
+        desc = "Spring Test",
+      },
+      {
+        "<leader>jb",
+        function()
+          run_spring_task("Spring Boot Build", { "build" })
+        end,
+        desc = "Spring Build",
       },
       {
         "<leader>ns",
@@ -297,5 +396,8 @@ return {
         direction = "right",
       },
     },
+    init = function()
+      register_spring_commands()
+    end,
   },
 }
