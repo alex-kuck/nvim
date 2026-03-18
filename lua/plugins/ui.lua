@@ -10,6 +10,48 @@ return {
     },
   },
 
+  -- Show indent guides only for the current scope/block.
+  {
+    "snacks.nvim",
+    opts = {
+      -- Disable Snacks guides; mini.indentscope below will handle current scope.
+      indent = { enabled = false },
+      scope = { enabled = false },
+    },
+  },
+
+  {
+    "nvim-mini/mini.indentscope",
+    event = "VeryLazy",
+    opts = function()
+      local indentscope = require("mini.indentscope")
+      return {
+        -- Draw a single guide only for the current scope.
+        symbol = "▎",
+        options = {
+          try_as_border = true,
+        },
+        draw = {
+          delay = 0,
+          animation = indentscope.gen_animation.none(),
+        },
+      }
+    end,
+    config = function(_, opts)
+      require("mini.indentscope").setup(opts)
+    end,
+    init = function()
+      -- Keep the scope guide visible and consistent across colorschemes.
+      local function set_scope_hl()
+        vim.api.nvim_set_hl(0, "MiniIndentscopeSymbol", { fg = "#7aa2f7" })
+      end
+      set_scope_hl()
+      vim.api.nvim_create_autocmd("ColorScheme", {
+        callback = set_scope_hl,
+      })
+    end,
+  },
+
   -- Git change indicators in the gutter (IntelliJ-like bars).
   {
     "lewis6991/gitsigns.nvim",
