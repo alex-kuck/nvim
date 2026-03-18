@@ -156,6 +156,8 @@ return {
   {
     "stevearc/conform.nvim",
     opts = {
+      async = true,
+      lsp_fallback = true,
       formatters_by_ft = {
         go = { "goimports", "gofumpt" },
       },
