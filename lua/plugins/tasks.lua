@@ -204,8 +204,15 @@ local function run_spring_task(task_name, gradle_args)
     name = task_name,
     cmd = vim.list_extend({ gradle_cmd(root) }, gradle_args),
     cwd = root,
-    components = { "default" },
+    components = {
+      -- IntelliJ-like run window behavior for Spring task execution.
+      { "open_output", direction = "horizontal", focus = false, on_start = "always" },
+      "default",
+    },
   }):start()
+
+  -- Keep task tree visible while running Spring commands.
+  overseer.open({ direction = "right", enter = false })
 end
 
 local function run_custom_gradle(input)
@@ -392,6 +399,13 @@ return {
       },
     },
     opts = {
+      component_aliases = {
+        -- Keep neotest-overseer runs focused on the summary tree only.
+        -- Output can still be opened manually via task actions if needed.
+        default_neotest = {
+          "default",
+        },
+      },
       task_list = {
         direction = "right",
       },
