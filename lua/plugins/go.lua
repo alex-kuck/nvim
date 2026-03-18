@@ -63,11 +63,6 @@ local function run_go_file()
   require("neotest").run.run(vim.fn.expand("%:p"))
 end
 
--- Debug the current Go test file via nvim-dap/neotest strategy.
-local function debug_go_file()
-  require("neotest").run.run({ vim.fn.expand("%:p"), strategy = "dap" })
-end
-
 -- Always show output from the latest run. Using `last_run` avoids cursor/
 -- nearest-position ambiguity and works well with smart run fallbacks.
 local function open_last_output()
@@ -347,49 +342,9 @@ return {
         desc = "Debug Smart Test (Neotest)",
       },
       {
-        "<leader>tD",
-        debug_go_file,
-        desc = "Debug File (Neotest)",
-      },
-      {
         "<leader>to",
         open_last_output,
         desc = "Show Last Output (Neotest)",
-      },
-      {
-        "<leader>ta",
-        function()
-          require("neotest").run.attach()
-        end,
-        desc = "Attach to Test (Neotest)",
-      },
-      {
-        "<leader>tl",
-        function()
-          require("neotest").run.run_last()
-        end,
-        desc = "Run Last (Neotest)",
-      },
-      {
-        "<leader>tO",
-        function()
-          require("neotest").output_panel.toggle()
-        end,
-        desc = "Toggle Output Panel (Neotest)",
-      },
-      {
-        "<leader>tS",
-        function()
-          require("neotest").run.stop()
-        end,
-        desc = "Stop (Neotest)",
-      },
-      {
-        "<leader>tw",
-        function()
-          require("neotest").watch.toggle(vim.fn.expand("%"))
-        end,
-        desc = "Toggle Watch (Neotest)",
       },
       {
         "<leader>ts",
@@ -397,14 +352,6 @@ return {
           require("neotest").summary.toggle()
         end,
         desc = "Toggle Summary (Neotest)",
-      },
-      {
-        "<leader>tR",
-        function()
-          notify_nearest_info()
-          run_go_smart()
-        end,
-        desc = "Run Smart Test (Neotest)",
       },
     },
   },
