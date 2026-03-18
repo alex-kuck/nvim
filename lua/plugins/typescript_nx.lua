@@ -22,6 +22,7 @@ local function repo_root(path)
 end
 
 local function nx_ui_root(path)
+  -- Standard repo layout is <repo>/ui + <repo>/service; prefer /ui for TS tools.
   local root = repo_root(path)
   local ui = root .. "/ui"
   if path_exists(ui) and path_exists(ui .. "/nx.json") then
@@ -32,6 +33,7 @@ local function nx_ui_root(path)
 end
 
 local function package_has_dep(package_json_path, names)
+  -- Adapter checks should be package-local to avoid noisy monorepo false positives.
   local ok_read, content = pcall(require("neotest.lib").files.read, package_json_path)
   if not ok_read then
     return false
@@ -178,6 +180,7 @@ return {
         end,
       })
       vitest.is_test_file = function(file_path)
+        -- Restrict discovery to actual test files with local Vitest dependency.
         if not file_path then
           return false
         end
@@ -201,6 +204,7 @@ return {
         end,
       })
       jest.is_test_file = function(file_path)
+        -- Restrict discovery to Jest packages so summary trees stay accurate.
         if not file_path then
           return false
         end

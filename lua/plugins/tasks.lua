@@ -148,6 +148,7 @@ local function run_nx_task(task_name, nx_action, force_pick)
   end
 
   local function start_with(target)
+    -- Keep Nx runs rooted in /ui even when Neovim starts at repo root.
     overseer.new_task({
       name = task_name,
       cmd = { "yarn", "nx", nx_action, target },
@@ -298,6 +299,7 @@ return {
       {
         "<leader>sb",
         function()
+          -- Continuous mode mirrors IDE-like auto-rebuild/restart workflow.
           run_spring_task("Spring Boot Run", { "bootRun", "--continuous" })
         end,
         desc = "Spring Boot Run",
@@ -358,6 +360,7 @@ return {
       {
         "<leader>ns",
         function()
+          -- Auto-target from current file/folder, then fall back to picker.
           run_nx_task("Nx Serve", "serve", false)
         end,
         desc = "Nx Serve",

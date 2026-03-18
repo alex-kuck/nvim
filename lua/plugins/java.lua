@@ -31,6 +31,7 @@ local kotlin_last_run_start_ms = 0
 local function run_gradle(args, title)
   local overseer = require("overseer")
   local root = service_root()
+  -- Prefer project wrapper for consistent JVM/Gradle toolchain.
   local gradlew = vim.uv.fs_stat(root .. "/gradlew") and "./gradlew" or "gradle"
   overseer.new_task({
     name = title,
@@ -249,6 +250,7 @@ local function kotlin_nearest_test_spec()
   local class_name
   local method_name
 
+  -- Heuristic fallback only; neotest node resolution is still preferred first.
   for lnum = row, 1, -1 do
     local line = vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1] or ""
     if not class_name then
@@ -523,6 +525,7 @@ return {
         -- Custom Spring task for local test profile execution.
         "<leader>jl",
         function()
+          -- Continuous mode supports fast edit/run loops for Spring integration checks.
           run_gradle({ "bootTestRun", "--continuous" }, "Spring Boot Test Run")
         end,
         desc = "Spring Boot Test Run",

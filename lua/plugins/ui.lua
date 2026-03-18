@@ -38,6 +38,7 @@ return {
       }
     end,
     config = function(_, opts)
+      -- Explicit setup avoids load-order ambiguity with lazy-loaded mini modules.
       require("mini.indentscope").setup(opts)
     end,
     init = function()
