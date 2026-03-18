@@ -216,7 +216,7 @@ return {
       adapters = {
         -- neotest-golang is currently more stable than neotest-go in this setup.
         ["neotest-golang"] = {
-          go_test_args = { "-v", "-race", "-count=1" },
+          go_test_args = { "-v" },
           dap_go_enabled = true,
         },
       },
