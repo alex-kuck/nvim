@@ -53,6 +53,67 @@ local function ui_root()
   return found and vim.fs.dirname(found) or nil
 end
 
+local function package_json_path(root)
+  local search_root = root or ui_root() or vim.fn.getcwd()
+  return path_join(search_root, "package.json")
+end
+
+local function get_npm_scripts(root)
+  local pkg_file = package_json_path(root)
+  if not path_exists(pkg_file) then
+    return nil
+  end
+  local ok_read, lines = pcall(vim.fn.readfile, pkg_file)
+  if not ok_read then
+    return nil
+  end
+  local ok_json, pkg = pcall(vim.json.decode, table.concat(lines, "\n"))
+  if not ok_json or type(pkg) ~= "table" or type(pkg.scripts) ~= "table" then
+    return nil
+  end
+  local scripts = {}
+  for name, _ in pairs(pkg.scripts) do
+    table.insert(scripts, name)
+  end
+  table.sort(scripts)
+  return scripts
+end
+
+local function run_npm_script(script_name, root)
+  local overseer = require("overseer")
+  local pkg_root = root or ui_root() or vim.fn.getcwd()
+  local pkg_file = path_join(pkg_root, "package.json")
+  if not path_exists(pkg_file) then
+    vim.notify("No package.json found in " .. pkg_root, vim.log.levels.WARN)
+    return
+  end
+  local yarn = path_exists(path_join(pkg_root, "yarn.lock")) and "yarn" or "npm"
+  overseer.new_task({
+    name = "npm: " .. script_name,
+    cmd = { yarn, "run", script_name },
+    cwd = pkg_root,
+    components = { "default" },
+  }):start()
+end
+
+local function prompt_npm_script()
+  local root = ui_root()
+  if not root then
+    vim.notify("No package.json root found", vim.log.levels.WARN)
+    return
+  end
+  local scripts = get_npm_scripts(root)
+  if not scripts or #scripts == 0 then
+    vim.notify("No scripts found in package.json", vim.log.levels.WARN)
+    return
+  end
+  vim.ui.select(scripts, { prompt = "npm script:" }, function(choice)
+    if choice then
+      run_npm_script(choice, root)
+    end
+  end)
+end
+
 local function decode_json(file)
   if not path_exists(file) then
     return nil
@@ -258,6 +319,7 @@ local function register_spring_commands()
     SpringGradle = function(opts)
       run_custom_gradle(opts.args)
     end,
+    NpmScripts = prompt_npm_script,
   }
 
   for name, fn in pairs(commands) do
@@ -399,6 +461,11 @@ return {
           run_nx_task("Nx Build", "build", true)
         end,
         desc = "Nx Build (Pick Target)",
+      },
+      {
+        "<leader>nr",
+        prompt_npm_script,
+        desc = "npm Scripts",
       },
     },
     opts = {
