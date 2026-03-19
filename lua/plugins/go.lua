@@ -366,7 +366,7 @@ return {
       "nvim-lua/plenary.nvim",
       "nvim-treesitter/nvim-treesitter",
     },
-    opts = {},
+    opts = { timeout = 120000 },
     keys = {
       {
         "<leader>Gcj",
