@@ -10,53 +10,35 @@ return {
     },
   },
 
-  -- Show indent guides only for the current scope/block.
+  -- Show all indent guides (gray) with active scope highlighted (blue).
   {
     "snacks.nvim",
     opts = {
-      -- Disable Snacks guides; mini.indentscope below will handle current scope.
-      indent = { enabled = false },
-      scope = { enabled = false },
-      picker = {
-        hidden = true,
-        sources = {
-          files = {
-            hidden = true,
-          },
-        },
+      indent = {
+        enabled = true,
+        char = "▎",
+        only_scope = false,
+        hl = "SnacksIndent",
+      },
+      animate = { enabled = false },
+      scope = {
+        enabled = true,
+        char = "▎",
+        hl = "SnacksIndentScope",
       },
     },
-  },
-
-  {
-    "nvim-mini/mini.indentscope",
-    event = "VeryLazy",
-    opts = function()
-      local indentscope = require("mini.indentscope")
-      return {
-        -- Draw a single guide only for the current scope.
-        symbol = "▎",
-        options = {
-          try_as_border = true,
-        },
-        draw = {
-          delay = 0,
-          animation = indentscope.gen_animation.none(),
-        },
-      }
-    end,
-    config = function(_, opts)
-      -- Explicit setup avoids load-order ambiguity with lazy-loaded mini modules.
-      require("mini.indentscope").setup(opts)
-    end,
     init = function()
-      -- Keep the scope guide visible and consistent across colorschemes.
-      local function set_scope_hl()
-        vim.api.nvim_set_hl(0, "MiniIndentscopeSymbol", { fg = "#7aa2f7" })
+      local group = vim.api.nvim_create_augroup("snacks_indent_hl", { clear = true })
+
+      local function set_indent_hl()
+        vim.api.nvim_set_hl(0, "SnacksIndent", { fg = "#4a4a5a" })
+        vim.api.nvim_set_hl(0, "SnacksIndentScope", { fg = "#7aa2f7" })
       end
-      set_scope_hl()
+
+      set_indent_hl()
       vim.api.nvim_create_autocmd("ColorScheme", {
-        callback = set_scope_hl,
+        group = group,
+        callback = set_indent_hl,
       })
     end,
   },
