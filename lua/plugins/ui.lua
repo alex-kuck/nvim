@@ -26,6 +26,14 @@ return {
         char = "▎",
         hl = "SnacksIndentScope",
       },
+      picker = {
+        hidden = true,
+        sources = {
+          files = {
+            hidden = true,
+          },
+        },
+      },
     },
     init = function()
       local group = vim.api.nvim_create_augroup("snacks_indent_hl", { clear = true })
