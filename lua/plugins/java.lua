@@ -273,6 +273,141 @@ local function kotlin_nearest_test_spec()
   return file
 end
 
+local function code_action_with_kind(kind)
+  return function()
+    local opts = {}
+    if kind then
+      opts.context = { only = { kind } }
+    end
+    vim.lsp.buf.code_action(opts)
+  end
+end
+
+local function show_kotlin_code_action_capabilities(bufnr)
+  local lines = {}
+  for _, client in ipairs(vim.lsp.get_clients({ bufnr = bufnr })) do
+    if client.name == "kotlin_lsp" or client.name == "kotlin_language_server" then
+      local provider = client.server_capabilities.codeActionProvider
+      if provider == nil then
+        table.insert(lines, string.format("%s: code actions not supported", client.name))
+      elseif provider == true then
+        table.insert(lines, string.format("%s: code actions supported (no kind list advertised)", client.name))
+      elseif type(provider) == "table" then
+        local kinds = provider.codeActionKinds or {}
+        if #kinds == 0 then
+          table.insert(lines, string.format("%s: code actions supported (empty kind list)", client.name))
+        else
+          table.insert(lines, string.format("%s: code action kinds: %s", client.name, table.concat(kinds, ", ")))
+        end
+      end
+    end
+  end
+
+  if #lines == 0 then
+    vim.notify("No Kotlin LSP client attached to this buffer", vim.log.levels.WARN)
+    return
+  end
+
+  vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "Kotlin LSP Capabilities" })
+end
+
+local function escape_lua_pattern(text)
+  return (text:gsub("([^%w])", "%%%1"))
+end
+
+local function find_kotlin_import_for_symbol(bufnr, symbol)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local matches = {}
+
+  for idx, line in ipairs(lines) do
+    local import_path, alias = line:match("^%s*import%s+([%w_%.`]+)%s+as%s+([%w_`]+)%s*$")
+    if not import_path then
+      import_path = line:match("^%s*import%s+([%w_%.`]+)%s*$")
+    end
+
+    if import_path then
+      local imported_name = import_path:match("([%w_`]+)$")
+      if imported_name == symbol then
+        table.insert(matches, {
+          line_idx = idx - 1,
+          path = import_path,
+          alias = alias,
+        })
+      end
+    end
+  end
+
+  if #matches == 1 then
+    return matches[1]
+  end
+
+  if #matches > 1 then
+    vim.notify(
+      "Multiple imports found for '" .. symbol .. "'. Place cursor on the import you want to alias.",
+      vim.log.levels.WARN
+    )
+  end
+
+  return nil
+end
+
+local function add_kotlin_import_alias()
+  local bufnr = vim.api.nvim_get_current_buf()
+  if vim.bo[bufnr].filetype ~= "kotlin" then
+    vim.notify("Add import alias is only available in Kotlin buffers", vim.log.levels.WARN)
+    return
+  end
+
+  local symbol = vim.fn.expand("<cword>")
+  if not symbol or symbol == "" then
+    vim.notify("No symbol under cursor", vim.log.levels.WARN)
+    return
+  end
+
+  local import_data = find_kotlin_import_for_symbol(bufnr, symbol)
+  if not import_data then
+    vim.notify(
+      "No matching import found for '" .. symbol .. "'. Import the symbol first, then run alias action.",
+      vim.log.levels.WARN
+    )
+    return
+  end
+
+  local current_name = import_data.alias or symbol
+  local alias = vim.fn.input("Import alias: ", current_name)
+  if not alias or alias == "" then
+    return
+  end
+
+  if alias == current_name and import_data.alias then
+    vim.notify("Import alias unchanged", vim.log.levels.INFO)
+    return
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  lines[import_data.line_idx + 1] = string.format("import %s as %s", import_data.path, alias)
+
+  local escaped_current = escape_lua_pattern(current_name)
+  local pattern = string.format("%%f[%%w_]%s%%f[^%%w_]", escaped_current)
+  local replacements = 0
+
+  for idx, line in ipairs(lines) do
+    if idx - 1 ~= import_data.line_idx and not line:match("^%s*import%s+") then
+      local updated, count = line:gsub(pattern, alias)
+      if count > 0 then
+        lines[idx] = updated
+        replacements = replacements + count
+      end
+    end
+  end
+
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+  vim.notify(
+    string.format("Aliased %s as %s and updated %d usage(s)", current_name, alias, replacements),
+    vim.log.levels.INFO
+  )
+end
+
 return {
   {
     "mfussenegger/nvim-jdtls",
@@ -417,6 +552,38 @@ return {
               },
             },
           },
+          on_attach = function(_, bufnr)
+            local map = function(mode, lhs, rhs, desc)
+              vim.keymap.set(mode, lhs, rhs, { buffer = bufnr, desc = desc })
+            end
+
+            -- Kotlin-focused code action entry points for quick refactor/quickfix discovery.
+            map({ "n", "x" }, "<leader>ca", code_action_with_kind(nil), "Code Action")
+            map({ "n", "x" }, "<leader>cR", code_action_with_kind("refactor"), "Refactor Actions")
+            map({ "n", "x" }, "<leader>cQ", code_action_with_kind("quickfix"), "Quick Fix Actions")
+            map({ "n", "x" }, "<leader>cS", code_action_with_kind("source"), "Source Actions")
+            -- Keep this outside <leader>ca* so it does not conflict with code-action mappings.
+            map("n", "<leader>ck", add_kotlin_import_alias, "Kotlin Add Import Alias")
+
+            -- Kotlin capability probe to verify what action kinds the server advertises.
+            if not vim.b[bufnr].kotlin_lsp_actions_info_command then
+              vim.api.nvim_buf_create_user_command(bufnr, "KotlinLspCodeActionsInfo", function()
+                show_kotlin_code_action_capabilities(bufnr)
+              end, {
+                desc = "Show Kotlin LSP code action capabilities",
+              })
+              vim.api.nvim_buf_create_user_command(bufnr, "KotlinAddImportAlias", function()
+                add_kotlin_import_alias()
+              end, {
+                desc = "Add alias to Kotlin import and rewrite file usages",
+              })
+              vim.b[bufnr].kotlin_lsp_actions_info_command = true
+            end
+
+            map("n", "<leader>cI", function()
+              show_kotlin_code_action_capabilities(bufnr)
+            end, "Kotlin Code Action Info")
+          end,
         },
       },
     },
