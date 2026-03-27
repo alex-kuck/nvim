@@ -472,6 +472,22 @@ local function kotlin_counterpart_names(is_test_scope, base)
   return names
 end
 
+local function kotlin_primary_counterpart_name(is_test_scope, base)
+  if not is_test_scope then
+    -- From source -> missing test should default to the conventional Test suffix.
+    return base .. "Test"
+  end
+
+  -- From test -> missing source should prefer stripped names (FooTest -> Foo).
+  for _, suffix in ipairs({ "IntegrationTest", "Tests", "Test", "IT", "Spec" }) do
+    if #base > #suffix and base:sub(-#suffix) == suffix then
+      return base:sub(1, #base - #suffix)
+    end
+  end
+
+  return base
+end
+
 local function build_kotlin_alternate_candidates(file)
   local ctx = kotlin_source_test_context(file)
   if not ctx then
@@ -526,8 +542,7 @@ local function default_kotlin_counterpart_path(file)
   local target_scope = ctx.is_test_scope and "main" or "test"
   local target_lang = ctx.lang
   local target_ext = target_lang == "kotlin" and "kt" or "java"
-  local names = kotlin_counterpart_names(ctx.is_test_scope, ctx.base)
-  local primary_name = names[1]
+  local primary_name = kotlin_primary_counterpart_name(ctx.is_test_scope, ctx.base)
   if not primary_name then
     return nil
   end
