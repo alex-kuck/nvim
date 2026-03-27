@@ -408,6 +408,215 @@ local function add_kotlin_import_alias()
   )
 end
 
+local function add_candidate_path(candidates, seen, path)
+  if not path or seen[path] then
+    return
+  end
+  if vim.uv.fs_stat(path) then
+    seen[path] = true
+    table.insert(candidates, path)
+  end
+end
+
+local function kotlin_source_test_context(file)
+  local module_root, scope, lang, rest = file:match("^(.*)/src/([^/]+)/([^/]+)/(.*)$")
+  if not module_root or not scope or not lang or not rest then
+    return nil
+  end
+
+  local scope_lc = scope:lower()
+  local is_test_scope = scope_lc:find("test", 1, true) ~= nil
+
+  local dir = rest:match("^(.*)/[^/]+$") or ""
+  local base, ext = rest:match("([^/]+)%.([^.]+)$")
+  if not base or not ext then
+    return nil
+  end
+
+  return {
+    module_root = module_root,
+    scope = scope,
+    is_test_scope = is_test_scope,
+    lang = lang,
+    rest = rest,
+    dir = dir,
+    base = base,
+    ext = ext,
+  }
+end
+
+local function kotlin_counterpart_names(is_test_scope, base)
+  local names = {}
+  local seen_names = {}
+
+  local function add_name(name)
+    if name and name ~= "" and not seen_names[name] then
+      seen_names[name] = true
+      table.insert(names, name)
+    end
+  end
+
+  if not is_test_scope then
+    for _, suffix in ipairs({ "Test", "Tests", "IT", "IntegrationTest", "Spec" }) do
+      add_name(base .. suffix)
+    end
+  else
+    add_name(base)
+    for _, suffix in ipairs({ "IntegrationTest", "Tests", "Test", "IT", "Spec" }) do
+      if #base > #suffix and base:sub(-#suffix) == suffix then
+        add_name(base:sub(1, #base - #suffix))
+      end
+    end
+  end
+
+  return names
+end
+
+local function build_kotlin_alternate_candidates(file)
+  local ctx = kotlin_source_test_context(file)
+  if not ctx then
+    return {}
+  end
+
+  local names = kotlin_counterpart_names(ctx.is_test_scope, ctx.base)
+  local target_scopes = ctx.is_test_scope and { "main" } or { "test", "integrationTest", "intTest" }
+  local alt_lang = ctx.lang == "kotlin" and "java" or "kotlin"
+  local langs = { ctx.lang, alt_lang }
+  local ext_by_lang = { kotlin = "kt", java = "java" }
+  local dir_prefix = ctx.dir ~= "" and (ctx.dir .. "/") or ""
+
+  local candidates = {}
+  local seen_paths = {}
+
+  for _, target_scope in ipairs(target_scopes) do
+    for _, target_lang in ipairs(langs) do
+      local target_ext = ext_by_lang[target_lang]
+      for _, name in ipairs(names) do
+        local exact =
+          string.format("%s/src/%s/%s/%s%s.%s", ctx.module_root, target_scope, target_lang, dir_prefix, name, target_ext)
+        add_candidate_path(candidates, seen_paths, exact)
+      end
+    end
+  end
+
+  -- Fallback for monorepos where tests are grouped in different subfolders.
+  for _, target_scope in ipairs(target_scopes) do
+    for _, target_lang in ipairs(langs) do
+      local target_ext = ext_by_lang[target_lang]
+      for _, name in ipairs(names) do
+        local pattern =
+          string.format("%s/src/%s/%s/**/%s.%s", ctx.module_root, target_scope, target_lang, name, target_ext)
+        for _, match in ipairs(vim.fn.glob(pattern, false, true)) do
+          add_candidate_path(candidates, seen_paths, match)
+        end
+      end
+    end
+  end
+
+  table.sort(candidates)
+  return candidates
+end
+
+local function default_kotlin_counterpart_path(file)
+  local ctx = kotlin_source_test_context(file)
+  if not ctx then
+    return nil
+  end
+
+  local target_scope = ctx.is_test_scope and "main" or "test"
+  local target_lang = ctx.lang
+  local target_ext = target_lang == "kotlin" and "kt" or "java"
+  local names = kotlin_counterpart_names(ctx.is_test_scope, ctx.base)
+  local primary_name = names[1]
+  if not primary_name then
+    return nil
+  end
+
+  local dir_prefix = ctx.dir ~= "" and (ctx.dir .. "/") or ""
+  return string.format("%s/src/%s/%s/%s%s.%s", ctx.module_root, target_scope, target_lang, dir_prefix, primary_name, target_ext)
+end
+
+local function create_kotlin_counterpart_file(current_file)
+  local target_path = default_kotlin_counterpart_path(current_file)
+  if not target_path then
+    vim.notify("Current file is not under a supported src/<scope>/<lang> path", vim.log.levels.WARN)
+    return
+  end
+
+  if vim.uv.fs_stat(target_path) then
+    vim.cmd.edit(vim.fn.fnameescape(target_path))
+    return
+  end
+
+  local dir = target_path:match("^(.*)/[^/]+$")
+  if dir then
+    vim.fn.mkdir(dir, "p")
+  end
+
+  local package_path = target_path:match("/src/[^/]+/[^/]+/(.*)/[^/]+$")
+  local class_name = target_path:match("/([^/]+)%.%w+$")
+  local package_name = package_path and package_path:gsub("/", ".") or nil
+
+  local lines = {}
+  if package_name and package_name ~= "" then
+    table.insert(lines, "package " .. package_name)
+    table.insert(lines, "")
+  end
+  table.insert(lines, "class " .. (class_name or "NewClass") .. " {")
+  table.insert(lines, "}")
+
+  vim.fn.writefile(lines, target_path)
+  vim.cmd.edit(vim.fn.fnameescape(target_path))
+  vim.notify("Created counterpart file: " .. vim.fn.fnamemodify(target_path, ":~:."), vim.log.levels.INFO)
+end
+
+local function jump_between_kotlin_source_and_test()
+  local bufnr = vim.api.nvim_get_current_buf()
+  if vim.bo[bufnr].filetype ~= "kotlin" then
+    vim.notify("Source/test jump is only available in Kotlin buffers", vim.log.levels.WARN)
+    return
+  end
+
+  local file = vim.api.nvim_buf_get_name(bufnr)
+  if file == "" then
+    vim.notify("Save the buffer before jumping between source and test", vim.log.levels.WARN)
+    return
+  end
+
+  local matches = build_kotlin_alternate_candidates(file)
+  if #matches == 0 then
+    local choice = vim.fn.confirm("No corresponding source/test file found. Create one?", "&Yes\n&No", 1)
+    if choice == 1 then
+      create_kotlin_counterpart_file(file)
+    end
+    return
+  end
+
+  if #matches == 1 then
+    vim.cmd.edit(vim.fn.fnameescape(matches[1]))
+    return
+  end
+
+  local items = {}
+  for _, path in ipairs(matches) do
+    table.insert(items, {
+      label = vim.fn.fnamemodify(path, ":~:."),
+      path = path,
+    })
+  end
+
+  vim.ui.select(items, {
+    prompt = "Choose corresponding source/test file",
+    format_item = function(item)
+      return item.label
+    end,
+  }, function(choice)
+    if choice and choice.path then
+      vim.cmd.edit(vim.fn.fnameescape(choice.path))
+    end
+  end)
+end
+
 return {
   {
     "mfussenegger/nvim-jdtls",
@@ -564,9 +773,11 @@ return {
             map({ "n", "x" }, "<leader>cS", code_action_with_kind("source"), "Source Actions")
             -- Keep this outside <leader>ca* so it does not conflict with code-action mappings.
             map("n", "<leader>ck", add_kotlin_import_alias, "Kotlin Add Import Alias")
+            -- IntelliJ-like jump between implementation and related test files.
+            map("n", "<leader>ct", jump_between_kotlin_source_and_test, "Kotlin Toggle Test File")
 
             -- Kotlin capability probe to verify what action kinds the server advertises.
-            if not vim.b[bufnr].kotlin_lsp_actions_info_command then
+            if not vim.b[bufnr].kotlin_lsp_commands_registered then
               vim.api.nvim_buf_create_user_command(bufnr, "KotlinLspCodeActionsInfo", function()
                 show_kotlin_code_action_capabilities(bufnr)
               end, {
@@ -577,7 +788,12 @@ return {
               end, {
                 desc = "Add alias to Kotlin import and rewrite file usages",
               })
-              vim.b[bufnr].kotlin_lsp_actions_info_command = true
+              vim.api.nvim_buf_create_user_command(bufnr, "KotlinToggleTestFile", function()
+                jump_between_kotlin_source_and_test()
+              end, {
+                desc = "Jump between Kotlin source and corresponding test files",
+              })
+              vim.b[bufnr].kotlin_lsp_commands_registered = true
             end
 
             map("n", "<leader>cI", function()
