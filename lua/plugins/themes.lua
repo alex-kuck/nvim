@@ -14,6 +14,13 @@ return {
       })
 
       vim.cmd("colorscheme github_dark_high_contrast")
+
+      vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
+        callback = function()
+          vim.api.nvim_set_hl(0, "Normal", { fg = "#ffdb00" })
+        end,
+        desc = "Set active buffer text to bright yellow",
+      })
     end,
   },
   -- {
