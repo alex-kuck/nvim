@@ -7,9 +7,23 @@ return {
     config = function()
       require("github-theme").setup({
         -- ...
+        options = {
+          transparent = true,
+          dim_inactive = true,
+        },
       })
 
       vim.cmd("colorscheme github_dark_high_contrast")
     end,
   },
+  -- {
+  --   "folke/tokyonight.nvim",
+  --   opts = {
+  --     transparent = true,
+  --     styles = {
+  --       sidebars = "transparent",
+  --       floats = "transparent",
+  --     },
+  --   },
+  -- },
 }

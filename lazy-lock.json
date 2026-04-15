@@ -10,7 +10,7 @@
   "fzf-lua": { "branch": "main", "commit": "be79dead8b147acce0daa3fc15cf5f0f4d6f2232" },
   "github-theme": { "branch": "main", "commit": "c106c9472154d6b2c74b74565616b877ae8ed31d" },
   "gitsigns.nvim": { "branch": "main", "commit": "8d82c240f190fc33723d48c308ccc1ed8baad69d" },
-  "go-impl.nvim": { "branch": "main", "commit": "399d144cf726347603bb57cddaec28ef01c08c57" },
+  "go-impl.nvim": { "branch": "main", "commit": "17465887f14f8a00f453cdc75bfb41a11c114cbf" },
   "gopher.nvim": { "branch": "main", "commit": "27ba078f14dd39fcd5e8a57d7009cdd77450ebbb" },
   "grug-far.nvim": { "branch": "main", "commit": "21604255d0e8f9968322f61f2b6c09e5efe1285a" },
   "helm-ls.nvim": { "branch": "main", "commit": "20df43509b02a3ce3c6b3eee254d6e2bffa9a370" },
