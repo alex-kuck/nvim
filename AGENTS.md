@@ -20,11 +20,12 @@ No external Cursor/Copilot rule files currently constrain this repo.
 
 ## 1) Fast config validation (primary)
 
+- Environment note: `luac` is not installed in this workspace by default, so use Neovim headless validation commands as the standard path.
 - Start/exit Neovim headless:
   - `nvim --headless "+qa"`
 - Parse a specific Lua file:
-  - `luac -p "lua/plugins/java.lua"`
-  - `luac -p "lua/plugins/typescript_nx.lua"`
+  - Optional only when available: `luac -p "lua/plugins/java.lua"`
+  - Optional only when available: `luac -p "lua/plugins/typescript_nx.lua"`
 - Validate a plugin file via Neovim runtime:
   - `nvim --headless "+lua dofile('lua/plugins/ui.lua')" +qa`
 
@@ -164,7 +165,7 @@ Nx task shortcuts (interactive keymaps):
 
 1. Read relevant file(s) fully before editing.
 2. Make minimal, localized edits.
-3. Run `luac -p` on changed Lua files.
+3. Run `nvim --headless "+lua dofile('<changed-file>.lua')" +qa` for changed Lua files (use `luac -p` only if installed).
 4. Run `nvim --headless "+qa"`.
 5. If plugin graph changed, sync and verify `lazy-lock.json`.
 6. Summarize behavior impact and any manual verification steps.
