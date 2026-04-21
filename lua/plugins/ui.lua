@@ -165,4 +165,29 @@ return {
       })
     end,
   },
+
+  -- Add current repository name between mode and branch in lualine.
+  {
+    "nvim-lualine/lualine.nvim",
+    opts = function(_, opts)
+      local function repo_name()
+        local root = vim.fs.root(0, { ".git" })
+        if not root or root == "" then
+          return ""
+        end
+        return vim.fs.basename(root)
+      end
+
+      opts.sections = opts.sections or {}
+      opts.sections.lualine_b = opts.sections.lualine_b or {}
+      table.insert(opts.sections.lualine_b, 1, {
+        repo_name,
+        icon = "",
+        separator = { right = "" },
+        cond = function()
+          return repo_name() ~= ""
+        end,
+      })
+    end,
+  },
 }
