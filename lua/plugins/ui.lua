@@ -48,6 +48,61 @@ return {
         group = group,
         callback = set_indent_hl,
       })
+
+      -- Open explorer on startup only for repo-root sessions (no direct file args).
+      -- This keeps startup clean when launching into a specific file.
+      local function should_open_explorer_on_start()
+        local argc = vim.fn.argc()
+        if argc > 0 then
+          for i = 0, argc - 1 do
+            local arg = vim.fn.argv(i)
+            if arg ~= "" then
+              local abs = vim.fn.fnamemodify(arg, ":p")
+              if vim.fn.isdirectory(abs) == 0 then
+                return false
+              end
+            end
+          end
+        end
+
+        local cwd = vim.uv.cwd() or vim.fn.getcwd()
+        if not cwd or cwd == "" then
+          return false
+        end
+        return vim.fs.find({ ".git" }, { path = cwd, upward = true })[1] ~= nil
+      end
+
+      -- Keep startup dashboard focused after opening the explorer sidebar.
+      local function find_dashboard_win()
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_win_is_valid(win) then
+            local buf = vim.api.nvim_win_get_buf(win)
+            local ft = vim.bo[buf].filetype
+            if ft == "snacks_dashboard" or ft == "dashboard" or ft == "ministarter" then
+              return win
+            end
+          end
+        end
+      end
+
+      vim.api.nvim_create_autocmd("VimEnter", {
+        group = group,
+        once = true,
+        callback = function()
+          vim.schedule(function()
+            if should_open_explorer_on_start() and type(Snacks) == "table" and Snacks.explorer and Snacks.explorer.open then
+              local target_win = find_dashboard_win() or vim.api.nvim_get_current_win()
+              Snacks.explorer.open()
+              vim.defer_fn(function()
+                local restore_win = find_dashboard_win() or target_win
+                if restore_win and vim.api.nvim_win_is_valid(restore_win) then
+                  vim.api.nvim_set_current_win(restore_win)
+                end
+              end, 20)
+            end
+          end)
+        end,
+      })
     end,
   },
 
