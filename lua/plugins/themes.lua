@@ -130,12 +130,80 @@ return {
         vim.api.nvim_set_hl(0, "LspReferenceRead", { fg = "#fefff0", bg = "#2a4e5d", bold = true })
         vim.api.nvim_set_hl(0, "LspReferenceWrite", { fg = "#fefff0", bg = "#3a5f2f", bold = true })
         vim.api.nvim_set_hl(0, "MatchWord", { fg = "#fefff0", bg = "#2a4e5d", underline = true })
+
+        -- Active window accents for split-heavy workflows.
+        vim.api.nvim_set_hl(0, "SpacedustInactiveWindow", { fg = fg_muted, bg = "#0f2b36" })
+        vim.api.nvim_set_hl(0, "SpacedustWinSeparatorActive", { fg = "#e3cd7b", bg = "NONE", bold = true })
+        vim.api.nvim_set_hl(0, "SpacedustWinSeparatorInactive", { fg = "#355564", bg = "NONE" })
+      end
+
+      -- Merge window-local winhighlight overrides without dropping existing mappings.
+      local function merge_winhl(current, overrides)
+        local parsed = {}
+        for entry in (current or ""):gmatch("[^,]+") do
+          local from, to = entry:match("^([^:]+):(.+)$")
+          if from and to then
+            parsed[from] = to
+          end
+        end
+        for from, to in pairs(overrides) do
+          parsed[from] = to
+        end
+        local out = {}
+        for from, to in pairs(parsed) do
+          out[#out + 1] = from .. ":" .. to
+        end
+        table.sort(out)
+        return table.concat(out, ",")
+      end
+
+      -- Emphasize the focused split and gently dim non-focused splits.
+      local function refresh_active_window_highlight()
+        local current_win = vim.api.nvim_get_current_win()
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_win_is_valid(win) then
+            local cfg = vim.api.nvim_win_get_config(win)
+            if cfg.relative == "" then
+              if win == current_win then
+                vim.wo[win].winhighlight = merge_winhl(vim.wo[win].winhighlight, {
+                  Normal = "Normal",
+                  NormalNC = "Normal",
+                  SignColumn = "SignColumn",
+                  CursorLine = "CursorLine",
+                  WinBar = "WinBar",
+                  WinSeparator = "SpacedustWinSeparatorActive",
+                })
+              else
+                vim.wo[win].winhighlight = merge_winhl(vim.wo[win].winhighlight, {
+                  Normal = "SpacedustInactiveWindow",
+                  NormalNC = "SpacedustInactiveWindow",
+                  SignColumn = "SpacedustInactiveWindow",
+                  CursorLine = "SpacedustInactiveWindow",
+                  WinBar = "WinBarNC",
+                  WinSeparator = "SpacedustWinSeparatorInactive",
+                })
+              end
+            end
+          end
+        end
       end
 
       set_spacedust_ui_hl()
+      refresh_active_window_highlight()
+
+      local spacedust_group = vim.api.nvim_create_augroup("spacedust_ui_overrides", { clear = true })
       vim.api.nvim_create_autocmd("ColorScheme", {
-        callback = set_spacedust_ui_hl,
-        desc = "Keep Spacedust transparent and Snacks readable",
+        group = spacedust_group,
+        callback = function()
+          set_spacedust_ui_hl()
+          refresh_active_window_highlight()
+        end,
+        desc = "Keep Spacedust transparent and window focus clear",
+      })
+      vim.api.nvim_create_autocmd({ "WinEnter", "WinLeave", "BufWinEnter", "TabEnter", "VimEnter" }, {
+        group = spacedust_group,
+        callback = refresh_active_window_highlight,
+        desc = "Highlight focused window in multi-pane layouts",
       })
 
       -- Keep this override disabled so Spacedust colors stay exact.
