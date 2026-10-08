@@ -32,6 +32,34 @@ local function nx_ui_root(path)
   return nx and vim.fs.dirname(nx) or root
 end
 
+local function config_root(path_or_bufnr, config_files)
+  local path = type(path_or_bufnr) == "number" and vim.api.nvim_buf_get_name(path_or_bufnr) or path_or_bufnr
+  if not path or path == "" then
+    return nil
+  end
+
+  local marker = vim.fs.find(config_files, {
+    path = vim.fs.dirname(path),
+    upward = true,
+    limit = 1,
+    type = "file",
+  })[1]
+  return marker and vim.fs.dirname(marker) or nil
+end
+
+local function oxfmt_root(path_or_bufnr)
+  return config_root(path_or_bufnr, { ".oxfmtrc.json", ".oxfmtrc.jsonc", "oxfmt.config.ts" })
+end
+
+local function oxlint_root(path_or_bufnr)
+  return config_root(path_or_bufnr, { ".oxlintrc.json", ".oxlintrc.jsonc", "oxlint.config.ts" })
+end
+
+local function formatters_for_project(bufnr, fallback)
+  -- Use Oxfmt only in projects that declare it; keep Prettier for other TS workspaces.
+  return oxfmt_root(bufnr) and { "oxfmt" } or fallback
+end
+
 local function package_has_dep(package_json_path, names)
   -- Adapter checks should be package-local to avoid noisy monorepo false positives.
   local ok_read, content = pcall(require("neotest.lib").files.read, package_json_path)
@@ -85,13 +113,15 @@ return {
     "neovim/nvim-lspconfig",
     opts = {
       servers = {
-        -- Use per-package ESLint roots in monorepos.
+        -- Keep ESLint for projects with ESLint configs; Nx/Oxc projects use Oxlint instead.
         eslint = {
           settings = {
             workingDirectory = { mode = "auto" },
             format = false,
           },
         },
+        -- nvim-lspconfig resolves the workspace-local node_modules/.bin/oxlint.
+        oxlint = {},
         -- vtsls gives better monorepo TypeScript performance than tsserver.
         vtsls = {
           settings = {
@@ -144,23 +174,53 @@ return {
       }
 
       opts.formatters_by_ft = opts.formatters_by_ft or {}
-      opts.formatters_by_ft.javascript = { "prettier" }
-      opts.formatters_by_ft.javascriptreact = { "prettier" }
-      opts.formatters_by_ft.typescript = { "prettier" }
-      opts.formatters_by_ft.typescriptreact = { "prettier" }
-      opts.formatters_by_ft.json = { "prettier" }
-      opts.formatters_by_ft.css = { "prettier" }
-      opts.formatters_by_ft.scss = { "prettier" }
-      opts.formatters_by_ft.html = { "prettier" }
-      opts.formatters_by_ft.markdown = { "prettier" }
-      opts.formatters_by_ft.yaml = { "prettier_yaml" }
+      opts.formatters_by_ft.javascript = function(bufnr)
+        return formatters_for_project(bufnr, { "prettier" })
+      end
+      opts.formatters_by_ft.javascriptreact = function(bufnr)
+        return formatters_for_project(bufnr, { "prettier" })
+      end
+      opts.formatters_by_ft.typescript = function(bufnr)
+        return formatters_for_project(bufnr, { "prettier" })
+      end
+      opts.formatters_by_ft.typescriptreact = function(bufnr)
+        return formatters_for_project(bufnr, { "prettier" })
+      end
+      opts.formatters_by_ft.json = function(bufnr)
+        return formatters_for_project(bufnr, { "prettier" })
+      end
+      opts.formatters_by_ft.jsonc = function(bufnr)
+        return formatters_for_project(bufnr, { "prettier" })
+      end
+      opts.formatters_by_ft.css = function(bufnr)
+        return formatters_for_project(bufnr, { "prettier" })
+      end
+      opts.formatters_by_ft.scss = function(bufnr)
+        return formatters_for_project(bufnr, { "prettier" })
+      end
+      opts.formatters_by_ft.html = function(bufnr)
+        return formatters_for_project(bufnr, { "prettier" })
+      end
+      opts.formatters_by_ft.markdown = function(bufnr)
+        return formatters_for_project(bufnr, { "prettier" })
+      end
+      opts.formatters_by_ft.yaml = function(bufnr)
+        return formatters_for_project(bufnr, { "prettier_yaml" })
+      end
     end,
   },
 
   {
     "mfussenegger/nvim-lint",
     opts = function(_, opts)
-      -- Keep diagnostics aligned with ESLint project rules.
+      -- ESLint_d remains the fallback; Oxlint LSP owns diagnostics under an Oxc config.
+      opts.linters = opts.linters or {}
+      opts.linters.eslint_d = vim.tbl_deep_extend("force", opts.linters.eslint_d or {}, {
+        condition = function(ctx)
+          return not oxlint_root(ctx.filename)
+        end,
+      })
+
       opts.linters_by_ft = opts.linters_by_ft or {}
       opts.linters_by_ft.javascript = { "eslint_d" }
       opts.linters_by_ft.javascriptreact = { "eslint_d" }
